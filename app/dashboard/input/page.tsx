@@ -1,251 +1,406 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { motion } from "framer-motion";
-import { ArrowRight, Lightbulb, Sparkles, ChevronDown } from "lucide-react";
-import { ProjectInput } from "@/types";
+import { motion, AnimatePresence } from "framer-motion";
+import { useDropzone } from "react-dropzone";
+import { X, Upload, FileText, Image, Loader2, Sparkles, ChevronDown } from "lucide-react";
+import { SAMPLE_PROJECTS } from "@/lib/sample-projects";
+import { ProjectInput, SampleProject } from "@/types";
 import { saveToLocalStorage } from "@/lib/utils";
+
+const TECH_SUGGESTIONS = [
+    "React", "Next.js", "Vue", "Angular", "Node.js", "Python", "FastAPI",
+    "Django", "Flask", "TypeScript", "JavaScript", "TailwindCSS", "PostgreSQL",
+    "MongoDB", "Firebase", "Supabase", "OpenAI", "LangChain", "Stripe", "AWS",
+    "Docker", "React Native", "Expo", "Flutter", "Swift", "Kotlin",
+];
 
 export default function InputPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
-    const [title, setTitle] = useState("");
-    const [description, setDescription] = useState("");
-    const [category, setCategory] = useState("SaaS & Software");
-    const [skillLevel, setSkillLevel] = useState("Beginner");
+    const [error, setError] = useState("");
+    const [techInput, setTechInput] = useState("");
+    const [files, setFiles] = useState<File[]>([]);
 
-    const handleSubmit = async (e: React.FormEvent) => {
+    const [form, setForm] = useState<Omit<ProjectInput, "files">>({
+        title: "",
+        description: "",
+        techStack: [],
+        targetAudience: "",
+        targetCountry: "",
+        preferredRevenue: "any",
+        knownCompetitors: "",
+        githubUrl: "",
+    });
+
+    // Load pre-selected sample from landing page
+    useEffect(() => {
+        const sampleId = localStorage.getItem("selectedSample");
+        if (sampleId) {
+            const sample = SAMPLE_PROJECTS.find((s) => s.id === sampleId);
+            if (sample) applySample(sample);
+            localStorage.removeItem("selectedSample");
+        }
+    }, []);
+
+    function applySample(sample: SampleProject) {
+        setForm({
+            title: sample.title,
+            description: sample.description,
+            techStack: sample.techStack,
+            targetAudience: sample.targetAudience,
+            targetCountry: "",
+            preferredRevenue: sample.preferredRevenue || "any",
+            knownCompetitors: "",
+            githubUrl: "",
+        });
+    }
+
+    const onDrop = useCallback((accepted: File[]) => {
+        setFiles((prev) => [...prev, ...accepted].slice(0, 3));
+    }, []);
+
+    const { getRootProps, getInputProps, isDragActive } = useDropzone({
+        onDrop,
+        accept: {
+            "application/pdf": [".pdf"],
+            "image/*": [".png", ".jpg", ".jpeg", ".webp"],
+            "text/plain": [".txt"],
+            "text/markdown": [".md"],
+        },
+        maxSize: 10 * 1024 * 1024, // 10MB
+    });
+
+    function addTechTag(tag: string) {
+        const trimmed = tag.trim();
+        if (trimmed && !form.techStack.includes(trimmed)) {
+            setForm((prev) => ({ ...prev, techStack: [...prev.techStack, trimmed] }));
+        }
+        setTechInput("");
+    }
+
+    function removeTechTag(tag: string) {
+        setForm((prev) => ({ ...prev, techStack: prev.techStack.filter((t) => t !== tag) }));
+    }
+
+    async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();
-        if (!title || !description) return;
-
+        if (!form.title || !form.description) {
+            setError("Please fill in at least the project title and description.");
+            return;
+        }
+        setError("");
         setLoading(true);
-
-        const projectInput: ProjectInput = {
-            title,
-            description,
-            techStack: [category, skillLevel], // mapping to techStack for backend compat
-            targetAudience: "Not specified",
-            preferredRevenue: "any",
-        };
 
         try {
             const formData = new FormData();
-            formData.append("title", title);
-            formData.append("description", description);
-            formData.append("techStack", JSON.stringify([category, skillLevel]));
+            formData.append("title", form.title);
+            formData.append("description", form.description);
+            formData.append("techStack", JSON.stringify(form.techStack));
+            if (form.targetAudience) formData.append("targetAudience", form.targetAudience);
+            if (form.targetCountry) formData.append("targetCountry", form.targetCountry);
+            if (form.preferredRevenue) formData.append("preferredRevenue", form.preferredRevenue);
+            if (form.knownCompetitors) formData.append("knownCompetitors", form.knownCompetitors);
+            if (form.githubUrl) formData.append("githubUrl", form.githubUrl);
+            files.forEach((f) => formData.append("files", f));
 
-            const response = await fetch("/api/analyze", {
-                method: "POST",
-                body: formData,
-            });
+            const res = await fetch("/api/analyze", { method: "POST", body: formData });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.error || "Analysis failed");
+            }
 
-            if (!response.ok) throw new Error("Analysis failed");
-
-            const data = await response.json();
+            const data = await res.json();
             saveToLocalStorage("c2c_result", data);
-            saveToLocalStorage("c2c_input", projectInput);
-
+            saveToLocalStorage("c2c_input", { ...form });
             router.push("/dashboard");
-        } catch (error) {
-            console.error(error);
-            alert("Failed to generate plan. Please verify logic or terminal for errors.");
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "Something went wrong. Check your API key.");
+        } finally {
             setLoading(false);
         }
-    };
+    }
 
-    if (loading) {
-        return (
-            <div className="flex-1 flex flex-col items-center justify-center min-h-[80vh]">
+    const filteredSuggestions = TECH_SUGGESTIONS.filter(
+        (t) => t.toLowerCase().includes(techInput.toLowerCase()) && !form.techStack.includes(t)
+    ).slice(0, 6);
+
+    return (
+        <div className="min-h-screen hero-gradient py-12 px-4">
+            <div className="max-w-3xl mx-auto">
+                {/* Header */}
                 <motion.div
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="relative flex items-center justify-center w-64 h-64 mb-8"
+                    initial={{ opacity: 0, y: -20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-center mb-10"
                 >
-                    {/* Abstract rotating scan ring */}
-                    <svg className="absolute inset-0 w-full h-full animate-[spin_4s_linear_infinite]" viewBox="0 0 100 100">
-                        <circle cx="50" cy="50" r="48" fill="none" stroke="rgba(168,85,247,0.2)" strokeWidth="2" />
-                        <circle cx="50" cy="50" r="48" fill="none" stroke="url(#spin-grad)" strokeWidth="2" strokeDasharray="30 200" strokeLinecap="round" />
-                        <defs>
-                            <linearGradient id="spin-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-                                <stop offset="0%" stopColor="#8b5cf6" />
-                                <stop offset="100%" stopColor="#3b82f6" />
-                            </linearGradient>
-                        </defs>
-                    </svg>
-                    {/* Inner glowing pulsing circle */}
-                    <div className="w-24 h-24 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center relative shadow-[0_0_40px_rgba(139,92,246,0.3)]">
-                        <motion.div animate={{ scale: [1, 1.2, 1], opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 2 }} className="absolute inset-0 bg-primary/20 rounded-full blur-xl" />
-                        <Sparkles className="w-8 h-8 text-primary shadow-primary z-10 drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
+                    <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-purple-500/10 border border-purple-500/20 text-purple-300 text-sm mb-4">
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Step 1 of 2 — Tell us about your project
+                    </div>
+                    <h1 className="text-3xl font-bold text-white mb-2">Analyze Your Project</h1>
+                    <p className="text-muted-foreground">
+                        The more detail you provide, the sharper the monetization paths.
+                    </p>
+                </motion.div>
+
+                {/* Sample Quick Fill */}
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.2 }}
+                    className="gradient-border card-gradient rounded-xl p-4 mb-6"
+                >
+                    <p className="text-sm text-muted-foreground mb-3 flex items-center gap-2">
+                        <ChevronDown className="w-4 h-4 text-purple-400" />
+                        Quick fill with a demo project:
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                        {SAMPLE_PROJECTS.map((s) => (
+                            <button
+                                key={s.id}
+                                onClick={() => applySample(s)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 text-purple-300 transition-colors"
+                            >
+                                {s.emoji} {s.title}
+                            </button>
+                        ))}
                     </div>
                 </motion.div>
 
-                <h2 className="text-2xl font-bold text-white mb-6">Analyzing your idea with AI...</h2>
-
-                <div className="flex items-center gap-8 mb-16">
-                    <div className="flex flex-col items-center gap-2">
-                        <span className="text-[10px] font-bold text-primary uppercase tracking-widest">SCANNING</span>
-                        <div className="w-8 h-1 rounded-full bg-primary" />
+                {/* Form */}
+                <motion.form
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.3 }}
+                    onSubmit={handleSubmit}
+                    className="space-y-5"
+                >
+                    {/* Title */}
+                    <div className="gradient-border card-gradient rounded-xl p-5">
+                        <label className="block text-sm font-medium text-white mb-2">
+                            Project Title <span className="text-red-400">*</span>
+                        </label>
+                        <input
+                            type="text"
+                            value={form.title}
+                            onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
+                            placeholder="e.g. AI Campus Note-Taker"
+                            className="w-full bg-background/50 border border-border rounded-lg px-4 py-3 text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition"
+                            required
+                        />
                     </div>
-                    <div className="flex flex-col items-center gap-2">
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">DRAFTING</span>
-                        <div className="w-8 h-1 rounded-full bg-muted-foreground/30" />
-                    </div>
-                    <div className="flex flex-col items-center gap-2">
-                        <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">REFINING</span>
-                        <div className="w-8 h-1 rounded-full bg-muted-foreground/30" />
-                    </div>
-                </div>
 
-                <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-secondary border border-border">
-                    <div className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-                    <span className="text-xs text-muted-foreground">Initializing Cash Craft neural connectors...</span>
-                </div>
-            </div>
-        );
-    }
-
-    return (
-        <div className="p-8 pb-16 max-w-6xl">
-            <div className="mb-10 max-w-3xl">
-                <h1 className="text-5xl font-extrabold text-white tracking-tight leading-[1.1] mb-4">
-                    Generate Your <br />
-                    <span className="bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-blue-400">
-                        Monetization Plan
-                    </span>
-                </h1>
-                <p className="text-lg text-muted-foreground leading-relaxed">
-                    Transform your creative vision into a sustainable revenue machine. Our AI engine analyzes your project parameters to craft a bespoke growth strategy.
-                </p>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-8 mb-8">
-                {/* Left Form Area */}
-                <div className="gradient-border card-gradient rounded-3xl p-8">
-                    <form onSubmit={handleSubmit} className="space-y-8">
-                        <div className="space-y-2.5">
-                            <label className="text-xs font-bold text-primary uppercase tracking-wider">Project Title</label>
-                            <input
-                                type="text"
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
-                                placeholder="e.g. Neo-Synth Creative Agency"
-                                className="w-full bg-[#1a1a23]/50 border border-border rounded-xl px-4 py-4 text-white placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary transition-colors font-medium"
-                            />
-                        </div>
-
-                        <div className="space-y-2.5">
-                            <label className="text-xs font-bold text-primary uppercase tracking-wider">Description</label>
-                            <textarea
-                                value={description}
-                                onChange={(e) => setDescription(e.target.value)}
-                                placeholder="Describe your project goals, target audience, and current stage..."
-                                className="w-full h-40 resize-none bg-[#1a1a23]/50 border border-border rounded-xl px-4 py-4 text-white placeholder:text-muted-foreground/50 focus:outline-none focus:border-primary transition-colors text-sm leading-relaxed"
-                            />
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                            <div className="space-y-2.5 relative">
-                                <label className="text-xs font-bold text-primary uppercase tracking-wider">Category</label>
-                                <div className="relative">
-                                    <select
-                                        value={category}
-                                        onChange={(e) => setCategory(e.target.value)}
-                                        className="w-full appearance-none bg-[#1a1a23]/50 border border-border rounded-xl px-4 py-4 text-white focus:outline-none focus:border-primary transition-colors text-sm cursor-pointer"
-                                    >
-                                        <option>SaaS & Software</option>
-                                        <option>E-Commerce</option>
-                                        <option>Content & Media</option>
-                                        <option>Agency / Services</option>
-                                    </select>
-                                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                                </div>
-                            </div>
-
-                            <div className="space-y-2.5 relative">
-                                <label className="text-xs font-bold text-primary uppercase tracking-wider">Skill Level (Optional)</label>
-                                <div className="relative">
-                                    <select
-                                        value={skillLevel}
-                                        onChange={(e) => setSkillLevel(e.target.value)}
-                                        className="w-full appearance-none bg-[#1a1a23]/50 border border-border rounded-xl px-4 py-4 text-white focus:outline-none focus:border-primary transition-colors text-sm cursor-pointer"
-                                    >
-                                        <option>Beginner</option>
-                                        <option>Intermediate</option>
-                                        <option>Advanced</option>
-                                        <option>Expert</option>
-                                    </select>
-                                    <ChevronDown className="absolute right-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="pt-4">
-                            <button
-                                type="submit"
-                                className="inline-flex items-center gap-2 px-8 py-4 rounded-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-400 hover:to-blue-400 text-white font-bold transition-all shadow-[0_0_30px_rgba(168,85,247,0.3)] hover:shadow-[0_0_40px_rgba(168,85,247,0.5)]"
-                            >
-                                Generate Plan
-                                <ArrowRight className="w-5 h-5" />
-                            </button>
-                        </div>
-                    </form>
-                </div>
-
-                {/* Right Info Cards */}
-                <div className="space-y-6">
-                    <div className="gradient-border card-gradient rounded-3xl p-6">
-                        <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20 mb-4">
-                            <Lightbulb className="w-5 h-5 text-blue-400" />
-                        </div>
-                        <h3 className="text-lg font-bold text-white mb-2">Pro Tip</h3>
-                        <p className="text-sm text-muted-foreground leading-relaxed">
-                            Projects with detailed descriptions generate 40% more accurate monetization paths. Focus on your USP.
+                    {/* Description */}
+                    <div className="gradient-border card-gradient rounded-xl p-5">
+                        <label className="block text-sm font-medium text-white mb-2">
+                            Project Description <span className="text-red-400">*</span>
+                        </label>
+                        <textarea
+                            value={form.description}
+                            onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+                            placeholder="Describe what your project does, the problem it solves, who uses it, and what makes it unique. The more detail, the better the analysis."
+                            rows={6}
+                            className="w-full bg-background/50 border border-border rounded-lg px-4 py-3 text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition resize-none"
+                            required
+                        />
+                        <p className="text-xs text-muted-foreground mt-2">
+                            {form.description.length} chars · Aim for 100+ words
                         </p>
                     </div>
 
-                    <div className="relative h-[250px] rounded-3xl overflow-hidden border border-border group cursor-pointer">
-                        <div className="absolute inset-0 bg-gradient-to-br from-[#1a1a24] to-[#0c0c14] z-0" />
-                        {/* Abstract background waves/lines */}
-                        <svg className="absolute inset-0 w-full h-full opacity-30 group-hover:opacity-50 transition-opacity z-0" preserveAspectRatio="none" viewBox="0 0 100 100">
-                            <path d="M0,50 Q25,25 50,50 T100,50 L100,100 L0,100 Z" fill="url(#wave-grad)" />
-                            <path d="M0,60 Q25,35 50,60 T100,60 L100,100 L0,100 Z" fill="url(#wave-grad)" opacity="0.5" />
-                            <path d="M0,40 Q25,45 50,40 T100,40" stroke="rgba(255,255,255,0.2)" fill="none" strokeWidth="0.5" />
-                            <defs>
-                                <linearGradient id="wave-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-                                    <stop offset="0%" stopColor="#ffffff" stopOpacity="0.1" />
-                                    <stop offset="100%" stopColor="#a855f7" stopOpacity="0.3" />
-                                </linearGradient>
-                            </defs>
-                        </svg>
-
-                        <div className="absolute bottom-6 left-6 right-6 z-10">
-                            <div className="flex items-center gap-1.5 mb-2">
-                                <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                                <span className="text-[10px] font-bold text-primary uppercase tracking-widest">LIVE INSIGHTS</span>
-                            </div>
-                            <h3 className="text-lg font-bold text-white leading-tight">
-                                Real-time Market Calibration
-                            </h3>
+                    {/* Tech Stack */}
+                    <div className="gradient-border card-gradient rounded-xl p-5">
+                        <label className="block text-sm font-medium text-white mb-2">Tech Stack</label>
+                        <div className="flex flex-wrap gap-2 mb-3">
+                            {form.techStack.map((tag) => (
+                                <span key={tag} className="tag-chip">
+                                    {tag}
+                                    <button type="button" onClick={() => removeTechTag(tag)}>
+                                        <X className="w-3 h-3 hover:text-red-400 transition-colors" />
+                                    </button>
+                                </span>
+                            ))}
+                        </div>
+                        <div className="relative">
+                            <input
+                                type="text"
+                                value={techInput}
+                                onChange={(e) => setTechInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter" || e.key === ",") {
+                                        e.preventDefault();
+                                        addTechTag(techInput);
+                                    }
+                                }}
+                                placeholder="Type a technology and press Enter..."
+                                className="w-full bg-background/50 border border-border rounded-lg px-4 py-3 text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition"
+                            />
+                            {techInput && filteredSuggestions.length > 0 && (
+                                <div className="absolute top-full left-0 right-0 mt-1 bg-card border border-border rounded-lg shadow-xl z-10 overflow-hidden">
+                                    {filteredSuggestions.map((s) => (
+                                        <button
+                                            key={s}
+                                            type="button"
+                                            onClick={() => addTechTag(s)}
+                                            className="w-full text-left px-4 py-2.5 text-sm text-white hover:bg-purple-500/10 transition-colors"
+                                        >
+                                            {s}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
-                </div>
-            </div>
 
-            {/* Bottom Metrics */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {[
-                    { label: "SAVED PLANS", value: "12" },
-                    { label: "AVG. CONFIDENCE", value: "94%" },
-                    { label: "CREDITS REMAINING", value: "450" },
-                ].map((metric) => (
-                    <div key={metric.label} className="gradient-border card-gradient rounded-3xl p-6">
-                        <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mb-2">{metric.label}</p>
-                        <p className="text-4xl font-extrabold text-white">{metric.value}</p>
+                    {/* Personalization */}
+                    <div className="gradient-border card-gradient rounded-xl p-5 space-y-4">
+                        <h3 className="text-sm font-medium text-white">Personalization <span className="text-muted-foreground font-normal">(optional but recommended)</span></h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-xs text-muted-foreground mb-1.5">Target Audience</label>
+                                <input
+                                    type="text"
+                                    value={form.targetAudience}
+                                    onChange={(e) => setForm((p) => ({ ...p, targetAudience: e.target.value }))}
+                                    placeholder="e.g. University students"
+                                    className="w-full bg-background/50 border border-border rounded-lg px-3 py-2.5 text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-muted-foreground mb-1.5">Target Region</label>
+                                <input
+                                    type="text"
+                                    value={form.targetCountry}
+                                    onChange={(e) => setForm((p) => ({ ...p, targetCountry: e.target.value }))}
+                                    placeholder="e.g. USA, Global, South Asia"
+                                    className="w-full bg-background/50 border border-border rounded-lg px-3 py-2.5 text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-muted-foreground mb-1.5">Revenue Style</label>
+                                <select
+                                    value={form.preferredRevenue}
+                                    onChange={(e) => setForm((p) => ({ ...p, preferredRevenue: e.target.value as ProjectInput["preferredRevenue"] }))}
+                                    className="w-full bg-background/50 border border-border rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition"
+                                >
+                                    <option value="any">Any style</option>
+                                    <option value="passive">Passive income</option>
+                                    <option value="active">Active / freelance</option>
+                                    <option value="b2b">B2B / enterprise</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs text-muted-foreground mb-1.5">GitHub URL</label>
+                                <input
+                                    type="url"
+                                    value={form.githubUrl}
+                                    onChange={(e) => setForm((p) => ({ ...p, githubUrl: e.target.value }))}
+                                    placeholder="https://github.com/..."
+                                    className="w-full bg-background/50 border border-border rounded-lg px-3 py-2.5 text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition"
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs text-muted-foreground mb-1.5">Known Competitors</label>
+                            <input
+                                type="text"
+                                value={form.knownCompetitors}
+                                onChange={(e) => setForm((p) => ({ ...p, knownCompetitors: e.target.value }))}
+                                placeholder="e.g. Notion, Otter.ai, Coursera"
+                                className="w-full bg-background/50 border border-border rounded-lg px-3 py-2.5 text-sm text-white placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition"
+                            />
+                        </div>
                     </div>
-                ))}
-            </div>
 
+                    {/* File Upload */}
+                    <div className="gradient-border card-gradient rounded-xl p-5">
+                        <h3 className="text-sm font-medium text-white mb-3">Upload Files <span className="text-muted-foreground font-normal">(optional · max 3)</span></h3>
+                        <div
+                            {...getRootProps()}
+                            className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all ${isDragActive
+                                ? "border-purple-500 bg-purple-500/10"
+                                : "border-border hover:border-purple-500/50 hover:bg-purple-500/5"
+                                }`}
+                        >
+                            <input {...getInputProps()} />
+                            <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
+                            <p className="text-sm text-white mb-1">
+                                {isDragActive ? "Drop files here..." : "Drag & drop files or click to browse"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">PDF, PNG, JPG, TXT, MD · Max 10MB each</p>
+                        </div>
+
+                        {files.length > 0 && (
+                            <div className="mt-3 space-y-2">
+                                {files.map((f, i) => (
+                                    <div key={i} className="flex items-center gap-3 p-3 rounded-lg bg-background/50 border border-border">
+                                        {f.type.startsWith("image/") ? (
+                                            <Image className="w-4 h-4 text-blue-400" />
+                                        ) : (
+                                            <FileText className="w-4 h-4 text-purple-400" />
+                                        )}
+                                        <span className="text-sm text-white flex-1 truncate">{f.name}</span>
+                                        <span className="text-xs text-muted-foreground">{(f.size / 1024).toFixed(0)}KB</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFiles((prev) => prev.filter((_, j) => j !== i))}
+                                        >
+                                            <X className="w-4 h-4 text-muted-foreground hover:text-red-400 transition-colors" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Error */}
+                    <AnimatePresence>
+                        {error && (
+                            <motion.div
+                                initial={{ opacity: 0, y: -8 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                exit={{ opacity: 0 }}
+                                className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm"
+                            >
+                                {error}
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
+
+                    {/* Submit */}
+                    <motion.button
+                        type="submit"
+                        disabled={loading}
+                        whileHover={{ scale: loading ? 1 : 1.02 }}
+                        whileTap={{ scale: loading ? 1 : 0.98 }}
+                        className="w-full py-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-xl font-semibold text-lg shadow-lg shadow-purple-900/30 transition-all flex items-center justify-center gap-3"
+                    >
+                        {loading ? (
+                            <>
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                                AI is analyzing your project...
+                            </>
+                        ) : (
+                            <>
+                                <Sparkles className="w-5 h-5" />
+                                Analyze & Generate Monetization Paths
+                            </>
+                        )}
+                    </motion.button>
+
+                    {loading && (
+                        <motion.p
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="text-center text-sm text-muted-foreground"
+                        >
+                            Evaluating on 5 dimensions · Matching 2026 market trends · This takes ~10–15 seconds
+                        </motion.p>
+                    )}
+                </motion.form>
+            </div>
         </div>
     );
 }
