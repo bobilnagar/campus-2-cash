@@ -116,9 +116,9 @@ Use this exact structure:
       "executionRisk": { "label": "Execution Risk & Timeline", "score": <10 minus scorecard feasibility score, capped at 10>, "summary": "<risk-focused reframing of feasibility summary>" }
     },
     "revenueEstimate": {
-      "conservative": "<e.g. $150–300/month>",
-      "realistic": "<e.g. $800–2,000/month>",
-      "optimistic": "<e.g. $5,000–12,000/month>",
+      "conservative": "<e.g. ₹15k–30k/month>",
+      "realistic": "<e.g. ₹80k–200k/month>",
+      "optimistic": "<e.g. ₹500k–1.2M/month>",
       "annualConservative": "<annual total>",
       "annualRealistic": "<annual total>",
       "annualOptimistic": "<annual total>",
@@ -132,18 +132,18 @@ Use this exact structure:
       "id": "path-1",
       "model": "<Specific Business Model Name — be creative and specific>",
       "emoji": "<one relevant emoji>",
-      "targetUsers": "<Primary segment — be specific, e.g. 'CS sophomores at US universities'>",
+      "targetUsers": "<Primary segment — be specific>",
       "secondaryUsers": "<Secondary segment>",
       "pricing": "<one-line pricing summary>",
       "pricingTiers": [
         {
           "name": "<tier name>",
-          "price": "<e.g. $0/month>",
+          "price": "<e.g. ₹0/month>",
           "features": ["<feature 1>", "<feature 2>", "<feature 3>"]
         },
         {
           "name": "<tier name>",
-          "price": "<e.g. $12/month>",
+          "price": "<e.g. ₹999/month>",
           "features": ["<feature 1>", "<feature 2>", "<feature 3>", "<feature 4>"]
         }
       ],
@@ -157,7 +157,7 @@ Use this exact structure:
       "whyItFits": "<2–3 sentences referencing specific aspects of THEIR project and tech stack>",
       "confidence": "<Low|Medium|High>",
       "confidenceReason": "<1 sentence explaining the confidence level>",
-      "estimatedMRR": "<e.g. $400–1,200>",
+      "estimatedMRR": "<e.g. ₹40k–120k>",
       "timeToFirstDollar": "<e.g. 2–3 weeks>",
       "marketTrendAlignment": "<Which specific 2026 trend from the market data supports this>"
     }

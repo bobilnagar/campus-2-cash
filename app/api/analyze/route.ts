@@ -128,28 +128,105 @@ export async function POST(req: NextRequest) {
         const model = getModel(hasImages);
 
         let raw: string;
-
-        if (hasImages) {
-            // Vision call
-            const parts: (string | { inlineData: { mimeType: string; data: string } })[] = [
-                textPrompt,
-                ...inlineImages,
-            ];
-            const result = await model.generateContent(parts);
-            raw = result.response.text();
-        } else {
-            const result = await model.generateContent(textPrompt);
-            raw = result.response.text();
+        try {
+            if (hasImages) {
+                // Vision call
+                const parts: (string | { inlineData: { mimeType: string; data: string } })[] = [
+                    textPrompt,
+                    ...inlineImages,
+                ];
+                const result = await model.generateContent(parts);
+                raw = result.response.text();
+            } else {
+                const result = await model.generateContent(textPrompt);
+                raw = result.response.text();
+            }
+            const parsed = parseAIResponse(raw);
+            return NextResponse.json(parsed);
+        } catch (apiError) {
+            console.error("Gemini API Error, falling back to mock:", apiError);
+            const mockParsed = generateMockReport(projectInput);
+            return NextResponse.json(mockParsed);
         }
-
-        const parsed = parseAIResponse(raw);
-        return NextResponse.json(parsed);
     } catch (error) {
-        console.error("Gemini API Error:", error);
-        const message =
-            error instanceof Error
-                ? error.message
-                : "Analysis failed. Please check your GEMINI_API_KEY and try again.";
-        return NextResponse.json({ error: message }, { status: 500 });
+        console.error("General API Route Error:", error);
+        return NextResponse.json(
+            { error: "Analysis failed completely, and fallback couldn't be generated." },
+            { status: 500 }
+        );
     }
+}
+
+function generateMockReport(input: ProjectInput): AnalysisResponse {
+    const score = 4 + Math.random() * 5.5; // Random score between 4.0 and 9.5
+
+    let verdict = "Needs Refinement";
+    let emoji = "🔨";
+    if (score >= 8.5) { verdict = "Investor-Ready"; emoji = "🚀"; }
+    else if (score >= 7.0) { verdict = "Strong Potential"; emoji = "⚡"; }
+    else if (score >= 5.5) { verdict = "Solid Foundation"; emoji = "🌱"; }
+
+    const dimScores = Array.from({ length: 10 }, () => Math.floor(Math.random() * 5) + 5);
+
+    const safeTechStack = input.techStack.length > 0 ? input.techStack.join(", ") : "your stack";
+
+    return {
+        generatedAt: new Date().toISOString(),
+        evaluation: {
+            realWorldValueScore: Number(score.toFixed(1)),
+            verdict,
+            verdictEmoji: emoji,
+            scorecard: {
+                marketSize: { label: "Market Size & Demand", score: dimScores[0], summary: `Based on your target audience, there's a demonstrable market.` },
+                problemSeverity: { label: "Problem Severity", score: dimScores[1], summary: "The problem severity is notable but could be validated further." },
+                uniqueness: { label: "Uniqueness", score: dimScores[2], summary: "Average differentiation compared to existing solutions." },
+                feasibility: { label: "Feasibility", score: dimScores[3], summary: `Highly feasible using ${safeTechStack}.` },
+                monetizationPotential: { label: "Monetization Potential", score: dimScores[4], summary: "Good base for potential future revenue streams." },
+                scalability: { label: "Scalability", score: dimScores[5], summary: "Can reasonably scale to initial users without major rebuilds." },
+                timeToRevenue: { label: "Time-to-Revenue", score: dimScores[6], summary: "Expect 4-6 weeks to validate first dollar." },
+                competitiveMoat: { label: "Competitive Moat", score: dimScores[7], summary: "Low defensive moat initially." },
+                founderFit: { label: "Founder Fit", score: dimScores[8], summary: "Good alignment with your skillset." },
+                trendAlignment: { label: "Trend Alignment", score: dimScores[9], summary: "Aligns moderately with 2026 trends." },
+            },
+            dimensions: {
+                marketSize: { label: "Market Size", score: dimScores[0], summary: "Demonstrable market." },
+                uniqueness: { label: "Uniqueness", score: dimScores[2], summary: "Average differentiation." },
+                feasibility: { label: "Feasibility", score: dimScores[3], summary: "Highly feasible." },
+                monetizationPotential: { label: "Monetization", score: dimScores[4], summary: "Good base." },
+                executionRisk: { label: "Risk", score: 10 - dimScores[3], summary: "Manageable execution risk." },
+            },
+            revenueEstimate: {
+                conservative: "₹5k-10k", realistic: "₹30k-80k", optimistic: "₹100k-300k",
+                timeframe: "First 6 months",
+                assumptions: "Assuming you dedicate 10hrs/week"
+            },
+            overallInsights: `(Mock Data) Since the AI API failed, this report is randomly generated! Your project "${input.title}" shows potential.`
+        },
+        paths: [
+            {
+                id: "mock-1",
+                model: "Freemium SaaS",
+                emoji: "💳",
+                targetUsers: "Early adopters",
+                pricing: "Free basic, ₹499/mo premium",
+                pricingTiers: [
+                    { name: "Basic", price: "₹0/mo", features: ["Core feature access"] },
+                    { name: "Pro", price: "₹499/mo", features: ["Advanced analytics", "Priority support"] }
+                ],
+                steps: ["Launch landing page", "Share on Reddit", "Gather 100 beta users", "Iterate on feedback", "Launch paid tier"],
+                whyItFits: `Matches your preferred style of ${input.preferredRevenue || "any"} revenue.`,
+                confidence: "Medium",
+                confidenceReason: "Standard proven model.",
+                timeToFirstDollar: "3-4 weeks",
+                marketTrendAlignment: "Micro-SaaS trend of 2026",
+            }
+        ],
+        strategicInsights: {
+            strengths: ["Clear project concept", "Modern tech stack"],
+            weaknesses: ["No validated audience yet", "Highly competitive space"],
+            secretWeapon: "Being a student yourself gives you authentic access to peers.",
+            quickWin: "Talk to 5 potential users this week."
+        },
+        overallInsights: "Keep iterating! Once the API is back online, you'll get a full AI-driven report."
+    };
 }

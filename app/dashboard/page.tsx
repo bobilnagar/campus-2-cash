@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { ArrowLeft, RefreshCw, Sparkles, TrendingUp, Brain } from "lucide-react";
-import { AnalysisResponse, ProjectInput } from "@/types";
+import { AnalysisResponse, ProjectInput, MonetizationPath } from "@/types";
 import { loadFromLocalStorage, saveToLocalStorage, getVerdictColor } from "@/lib/utils";
 import { EvaluationPanel } from "@/components/EvaluationPanel";
 import { ScorecardPanel } from "@/components/ScorecardPanel";
@@ -185,8 +185,8 @@ export default function DashboardPage() {
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
                             className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === tab.id
-                                    ? "bg-purple-600 text-white shadow"
-                                    : "text-muted-foreground hover:text-white"
+                                ? "bg-purple-600 text-white shadow"
+                                : "text-muted-foreground hover:text-white"
                                 }`}
                         >
                             {tab.icon}
@@ -202,7 +202,7 @@ export default function DashboardPage() {
                             <EvaluationPanel evaluation={result.evaluation} />
                         </div>
                         <div className="space-y-4">
-                            {result.paths.slice(0, 2).map((path, i) => (
+                            {result.paths.slice(0, 2).map((path: MonetizationPath, i: number) => (
                                 <MonetizationCard key={path.id || i} path={path} index={i} />
                             ))}
                             {result.paths.length > 2 && (
@@ -234,7 +234,7 @@ export default function DashboardPage() {
 
                 {activeTab === "paths" && (
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                        {result.paths.map((path, i) => (
+                        {result.paths.map((path: MonetizationPath, i: number) => (
                             <MonetizationCard key={path.id || i} path={path} index={i} />
                         ))}
                     </div>

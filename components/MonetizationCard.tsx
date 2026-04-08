@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MonetizationPath } from "@/types";
+import { MonetizationPath, PricingTier } from "@/types";
 import { getConfidenceColor } from "@/lib/utils";
 import { ChevronDown, ChevronUp, TrendingUp, Users, DollarSign, Zap } from "lucide-react";
 
@@ -60,7 +60,7 @@ export function MonetizationCard({ path, index }: Props) {
                         <Zap className="w-3.5 h-3.5 text-yellow-400" />
                         First Steps
                     </p>
-                    {path.steps.slice(0, 3).map((step, i) => (
+                    {path.steps.slice(0, 3).map((step: string, i: number) => (
                         <div key={i} className="flex items-start gap-2.5">
                             <span className="flex-shrink-0 w-5 h-5 rounded-full bg-purple-500/20 text-purple-300 text-xs flex items-center justify-center font-bold mt-0.5">
                                 {i + 1}
@@ -101,14 +101,14 @@ export function MonetizationCard({ path, index }: Props) {
                                 <div>
                                     <p className="text-xs font-medium text-white mb-2">Pricing Tiers</p>
                                     <div className="grid grid-cols-1 gap-2">
-                                        {path.pricingTiers.map((tier, i) => (
+                                        {path.pricingTiers.map((tier: PricingTier, i: number) => (
                                             <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-background/50 border border-border">
                                                 <div className="min-w-[80px]">
                                                     <div className="text-xs font-semibold text-white">{tier.name}</div>
                                                     <div className="text-xs text-emerald-400 font-medium">{tier.price}</div>
                                                 </div>
                                                 <ul className="flex-1 space-y-0.5">
-                                                    {tier.features.map((f, j) => (
+                                                    {tier.features.map((f: string, j: number) => (
                                                         <li key={j} className="text-xs text-muted-foreground flex items-center gap-1.5">
                                                             <span className="w-1 h-1 rounded-full bg-purple-400 flex-shrink-0" />
                                                             {f}
