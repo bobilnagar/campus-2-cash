@@ -127,6 +127,23 @@ export function MonetizationCard({ path, index }: Props) {
                                     {path.secondaryUsers}
                                 </div>
                             )}
+
+                            {path.timeToFirstDollar && (
+                                <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/15">
+                                    <span className="text-emerald-400 text-lg">⏱️</span>
+                                    <div>
+                                        <div className="text-xs font-medium text-emerald-400">Time to First Dollar</div>
+                                        <div className="text-sm text-white">{path.timeToFirstDollar}</div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {path.confidenceReason && (
+                                <div className="text-xs text-muted-foreground italic border-t border-border pt-2">
+                                    <span className="text-white font-medium not-italic">Confidence: </span>
+                                    {path.confidenceReason}
+                                </div>
+                            )}
                         </div>
                     </motion.div>
                 )}

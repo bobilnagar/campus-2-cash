@@ -1,30 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from "@google/generative-ai";
+import OpenAI from "openai";
 import { buildMasterPrompt, buildRefinePrompt } from "@/lib/ai-prompts";
-import { extractTextFromFile, truncateText, encodeImageToBase64 } from "@/lib/file-utils";
+import { extractTextFromFile, truncateText } from "@/lib/file-utils";
 import { AnalysisResponse, ProjectInput } from "@/types";
 
-// ── Gemini client ──────────────────────────────────────────
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
+// ── OpenRouter client ──────────────────────────────────────────
+const client = new OpenAI({
+    baseURL: "https://openrouter.ai/api/v1",
+    apiKey: process.env.OPENROUTER_API_KEY || "",
+    defaultHeaders: {
+        "HTTP-Referer": "https://campus-2-cash.vercel.app",
+        "X-Title": "Campus-2-Cash",
+    },
+});
 
-const SAFETY_SETTINGS = [
-    { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-    { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
-    { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
-    { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
-];
-
-function getModel(vision = false) {
-    return genAI.getGenerativeModel({
-        model: vision ? "gemini-2.0-flash" : "gemini-2.0-flash",
-        generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0.8,
-            maxOutputTokens: 8192,
-        },
-        safetySettings: SAFETY_SETTINGS,
-    });
-}
+const OPENROUTER_MODEL = "google/gemini-2.5-flash"; // User can choose to change this later
 
 // ── JSON extractor (strips markdown fences if present) ──────
 function extractJSON(raw: string): string {
@@ -72,15 +62,21 @@ export async function POST(req: NextRequest) {
             const body = await req.json();
             const { originalResponse, projectInput, userFeedback } = body;
 
-            const model = getModel(false);
             const prompt = buildRefinePrompt(
                 JSON.stringify(originalResponse),
                 userFeedback,
                 projectInput as ProjectInput
             );
 
-            const result = await model.generateContent(prompt);
-            const raw = result.response.text();
+            const completion = await client.chat.completions.create({
+                model: OPENROUTER_MODEL,
+                messages: [{ role: "user", content: prompt }],
+                response_format: { type: "json_object" },
+                temperature: 0.8,
+                max_tokens: 8192,
+            });
+
+            const raw = completion.choices[0]?.message?.content || "{}";
             const parsed = parseAIResponse(raw);
             return NextResponse.json(parsed);
         }
@@ -102,20 +98,18 @@ export async function POST(req: NextRequest) {
 
         // ── File extraction ───────────────────────────────────
         let extractedText = "";
-        const inlineImages: { inlineData: { mimeType: string; data: string } }[] = [];
+        const imageContents: { type: "image_url"; image_url: { url: string } }[] = [];
 
         const uploadedFiles = formData.getAll("files") as File[];
         for (const file of uploadedFiles.slice(0, 3)) {
             const buffer = Buffer.from(await file.arrayBuffer());
             const extracted = await extractTextFromFile(buffer, file.type, file.name);
 
-            if (extracted.isImage) {
+            if (extracted.isImage && extracted.base64) {
                 // Pass image inline for vision
-                inlineImages.push({
-                    inlineData: {
-                        mimeType: file.type,
-                        data: buffer.toString("base64"),
-                    },
+                imageContents.push({
+                    type: "image_url",
+                    image_url: { url: extracted.base64 },
                 });
             } else {
                 extractedText += "\n" + extracted.text;
@@ -124,32 +118,28 @@ export async function POST(req: NextRequest) {
 
         const textPrompt = buildMasterPrompt(projectInput, truncateText(extractedText, 4000));
 
-        const hasImages = inlineImages.length > 0;
-        const model = getModel(hasImages);
+        const userContent: OpenAI.Chat.ChatCompletionContentPart[] =
+            imageContents.length > 0
+                ? [{ type: "text", text: textPrompt }, ...imageContents]
+                : [{ type: "text", text: textPrompt }];
 
-        let raw: string;
+        const completion = await client.chat.completions.create({
+            model: OPENROUTER_MODEL,
+            messages: [{ role: "user", content: userContent }],
+            response_format: { type: "json_object" },
+            temperature: 0.8,
+            max_tokens: 8192,
+        });
 
-        if (hasImages) {
-            // Vision call
-            const parts: (string | { inlineData: { mimeType: string; data: string } })[] = [
-                textPrompt,
-                ...inlineImages,
-            ];
-            const result = await model.generateContent(parts);
-            raw = result.response.text();
-        } else {
-            const result = await model.generateContent(textPrompt);
-            raw = result.response.text();
-        }
-
+        const raw = completion.choices[0]?.message?.content || "{}";
         const parsed = parseAIResponse(raw);
         return NextResponse.json(parsed);
     } catch (error) {
-        console.error("Gemini API Error:", error);
+        console.error("OpenRouter API Error:", error);
         const message =
             error instanceof Error
                 ? error.message
-                : "Analysis failed. Please check your GEMINI_API_KEY and try again.";
+                : "Analysis failed. Please check your OPENROUTER_API_KEY and try again.";
         return NextResponse.json({ error: message }, { status: 500 });
     }
 }

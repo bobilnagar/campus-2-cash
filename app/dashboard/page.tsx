@@ -3,13 +3,17 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { RotateCcw, Sparkles, ArrowLeft, RefreshCw } from "lucide-react";
+import { ArrowLeft, RefreshCw, Sparkles, TrendingUp, Brain } from "lucide-react";
 import { AnalysisResponse, ProjectInput } from "@/types";
-import { loadFromLocalStorage, saveToLocalStorage } from "@/lib/utils";
+import { loadFromLocalStorage, saveToLocalStorage, getVerdictColor } from "@/lib/utils";
 import { EvaluationPanel } from "@/components/EvaluationPanel";
+import { ScorecardPanel } from "@/components/ScorecardPanel";
 import { MonetizationCard } from "@/components/MonetizationCard";
 import { RefineModal } from "@/components/RefineModal";
 import { ExportButton } from "@/components/ExportButton";
+import { StrategicInsightsCard } from "@/components/StrategicInsightsCard";
+
+type TabId = "overview" | "scorecard" | "paths" | "strategy";
 
 export default function DashboardPage() {
     const router = useRouter();
@@ -17,6 +21,7 @@ export default function DashboardPage() {
     const [projectInput, setProjectInput] = useState<ProjectInput | null>(null);
     const [refineOpen, setRefineOpen] = useState(false);
     const [refineCount, setRefineCount] = useState(0);
+    const [activeTab, setActiveTab] = useState<TabId>("overview");
 
     useEffect(() => {
         const saved = loadFromLocalStorage<AnalysisResponse>("c2c_result");
@@ -38,111 +43,220 @@ export default function DashboardPage() {
     if (!result || !projectInput) {
         return (
             <div className="min-h-screen hero-gradient flex items-center justify-center">
-                <div className="text-center">
-                    <div className="w-16 h-16 rounded-2xl bg-purple-500/20 animate-pulse mx-auto mb-4" />
+                <div className="text-center space-y-3">
+                    <div className="w-16 h-16 rounded-2xl bg-purple-500/20 animate-pulse mx-auto" />
                     <p className="text-muted-foreground">Loading results...</p>
                 </div>
             </div>
         );
     }
 
+    const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
+        { id: "overview", label: "Overview", icon: <TrendingUp className="w-3.5 h-3.5" /> },
+        { id: "scorecard", label: "Scorecard", icon: <Brain className="w-3.5 h-3.5" /> },
+        { id: "paths", label: `Paths (${result.paths.length})`, icon: <Sparkles className="w-3.5 h-3.5" /> },
+        ...(result.strategicInsights
+            ? [{ id: "strategy" as TabId, label: "Strategy", icon: <Brain className="w-3.5 h-3.5" /> }]
+            : []),
+    ];
+
     return (
         <div className="min-h-screen hero-gradient">
-            {/* Navbar */}
+            {/* Sticky Navbar */}
             <nav className="sticky top-0 z-30 backdrop-blur-md bg-background/80 border-b border-border">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3 flex-wrap">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
                         <button
                             onClick={() => router.push("/dashboard/input")}
-                            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors"
+                            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-white transition-colors flex-shrink-0"
                         >
                             <ArrowLeft className="w-4 h-4" />
-                            New Project
+                            New
                         </button>
                         <span className="text-border">·</span>
-                        <h1 className="font-bold text-white text-sm sm:text-base truncate max-w-[200px]">
+                        <h1 className="font-bold text-white text-sm sm:text-base truncate">
                             {projectInput.title}
                         </h1>
                         {refineCount > 0 && (
-                            <span className="px-2 py-0.5 rounded-full text-xs bg-purple-500/20 text-purple-300 border border-purple-500/20">
-                                Refined ×{refineCount}
+                            <span className="px-2 py-0.5 rounded-full text-xs bg-purple-500/20 text-purple-300 border border-purple-500/20 flex-shrink-0">
+                                ×{refineCount} refined
                             </span>
                         )}
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-shrink-0">
                         <ExportButton result={result} projectInput={projectInput} />
                         <button
+                            onClick={() => setRefineOpen(true)}
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-300 hover:text-purple-200 text-sm font-medium transition-all"
+                        >
+                            <Sparkles className="w-3.5 h-3.5" />
+                            Refine
+                        </button>
+                        <button
                             onClick={() => router.push("/dashboard/input")}
-                            className="flex items-center gap-2 px-3 py-2 rounded-xl border border-border text-muted-foreground hover:text-white hover:border-purple-500/50 text-sm transition-all"
+                            className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border text-muted-foreground hover:text-white hover:border-purple-500/50 text-sm transition-all"
                         >
                             <RefreshCw className="w-3.5 h-3.5" />
-                            Regenerate
                         </button>
                     </div>
                 </div>
             </nav>
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8">
-                {/* Overall insights banner */}
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+                {/* Score Hero Banner */}
                 <motion.div
-                    initial={{ opacity: 0, y: -10 }}
+                    initial={{ opacity: 0, y: -12 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="gradient-border card-gradient rounded-2xl p-5 mb-6 flex items-start gap-3"
+                    className="gradient-border card-gradient rounded-2xl p-5 mb-6 glow-purple-sm"
                 >
-                    <span className="text-2xl">💡</span>
-                    <div>
-                        <p className="text-sm font-medium text-white mb-1">AI Insights</p>
-                        <p className="text-sm text-muted-foreground leading-relaxed">
-                            {result.overallInsights || result.evaluation.overallInsights}
-                        </p>
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-5">
+                        {/* Big Score */}
+                        <div className="flex items-center gap-4 flex-shrink-0">
+                            <div className="relative">
+                                <svg width="80" height="80" viewBox="0 0 80 80" className="-rotate-90">
+                                    <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(139,92,246,0.15)" strokeWidth="6" />
+                                    <motion.circle
+                                        cx="40" cy="40" r="34"
+                                        fill="none"
+                                        stroke="url(#heroGrad)"
+                                        strokeWidth="6"
+                                        strokeLinecap="round"
+                                        strokeDasharray={2 * Math.PI * 34}
+                                        initial={{ strokeDashoffset: 2 * Math.PI * 34 }}
+                                        animate={{ strokeDashoffset: 2 * Math.PI * 34 * (1 - result.evaluation.realWorldValueScore / 10) }}
+                                        transition={{ duration: 1.5, ease: "easeOut" }}
+                                    />
+                                    <defs>
+                                        <linearGradient id="heroGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                                            <stop offset="0%" stopColor="#a855f7" />
+                                            <stop offset="100%" stopColor="#3b82f6" />
+                                        </linearGradient>
+                                    </defs>
+                                </svg>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                    <span className="text-xl font-extrabold text-white">
+                                        {result.evaluation.realWorldValueScore.toFixed(1)}
+                                    </span>
+                                </div>
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <span className="text-2xl">{result.evaluation.verdictEmoji}</span>
+                                    <span className={`text-lg font-bold ${getVerdictColor(result.evaluation.realWorldValueScore)}`}>
+                                        {result.evaluation.verdict}
+                                    </span>
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-0.5">Real-World Value Score</p>
+                            </div>
+                        </div>
+
+                        {/* Divider */}
+                        <div className="hidden sm:block w-px h-14 bg-border" />
+
+                        {/* Revenue at a glance */}
+                        <div className="flex-1 grid grid-cols-3 gap-3">
+                            {[
+                                { label: "Conservative", val: result.evaluation.revenueEstimate.conservative, color: "text-orange-400" },
+                                { label: "Realistic", val: result.evaluation.revenueEstimate.realistic, color: "text-yellow-400" },
+                                { label: "Optimistic", val: result.evaluation.revenueEstimate.optimistic, color: "text-emerald-400" },
+                            ].map((r) => (
+                                <div key={r.label} className="text-center">
+                                    <div className={`text-base font-bold ${r.color}`}>{r.val}</div>
+                                    <div className="text-xs text-muted-foreground">{r.label}/mo</div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Insights blurb */}
+                        <div className="hidden lg:flex items-start gap-2 max-w-xs">
+                            <span className="text-lg mt-0.5">💡</span>
+                            <p className="text-xs text-muted-foreground leading-relaxed line-clamp-4">
+                                {result.overallInsights || result.evaluation.overallInsights}
+                            </p>
+                        </div>
                     </div>
                 </motion.div>
 
-                {/* Two-panel layout */}
-                <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-6">
-                    {/* Left: Evaluation Panel */}
-                    <motion.div
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.1 }}
-                    >
-                        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-                            Evaluation
-                        </h2>
-                        <EvaluationPanel evaluation={result.evaluation} />
-                    </motion.div>
-
-                    {/* Right: Monetization Cards */}
-                    <motion.div
-                        initial={{ opacity: 0, x: 20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: 0.2 }}
-                    >
-                        <div className="flex items-center justify-between mb-3">
-                            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-                                Monetization Paths ({result.paths.length})
-                            </h2>
-                        </div>
-                        <div className="space-y-4">
-                            {result.paths.map((path, i) => (
-                                <MonetizationCard key={path.id || i} path={path} index={i} />
-                            ))}
-                        </div>
-                    </motion.div>
+                {/* TABS */}
+                <div className="flex gap-1 mb-6 bg-card/50 border border-border rounded-xl p-1 w-fit">
+                    {TABS.map((tab) => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${activeTab === tab.id
+                                    ? "bg-purple-600 text-white shadow"
+                                    : "text-muted-foreground hover:text-white"
+                                }`}
+                        >
+                            {tab.icon}
+                            {tab.label}
+                        </button>
+                    ))}
                 </div>
 
-                {/* Refine CTA */}
+                {/* Tab Content */}
+                {activeTab === "overview" && (
+                    <div className="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-6">
+                        <div className="space-y-4">
+                            <EvaluationPanel evaluation={result.evaluation} />
+                        </div>
+                        <div className="space-y-4">
+                            {result.paths.slice(0, 2).map((path, i) => (
+                                <MonetizationCard key={path.id || i} path={path} index={i} />
+                            ))}
+                            {result.paths.length > 2 && (
+                                <button
+                                    onClick={() => setActiveTab("paths")}
+                                    className="w-full py-3 border border-dashed border-border rounded-xl text-sm text-muted-foreground hover:text-white hover:border-purple-500/50 transition-all"
+                                >
+                                    + {result.paths.length - 2} more monetization paths →
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === "scorecard" && result.evaluation.scorecard && (
+                    <div className="max-w-3xl">
+                        <ScorecardPanel
+                            scorecard={result.evaluation.scorecard}
+                            totalScore={result.evaluation.realWorldValueScore}
+                        />
+                    </div>
+                )}
+
+                {activeTab === "scorecard" && !result.evaluation.scorecard && (
+                    <div className="max-w-3xl">
+                        <EvaluationPanel evaluation={result.evaluation} />
+                    </div>
+                )}
+
+                {activeTab === "paths" && (
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                        {result.paths.map((path, i) => (
+                            <MonetizationCard key={path.id || i} path={path} index={i} />
+                        ))}
+                    </div>
+                )}
+
+                {activeTab === "strategy" && result.strategicInsights && (
+                    <div className="max-w-2xl">
+                        <StrategicInsightsCard insights={result.strategicInsights} />
+                    </div>
+                )}
+
+                {/* Refine CTA at bottom */}
                 <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.4 }}
-                    className="mt-10 text-center"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.5 }}
+                    className="mt-10 flex justify-center"
                 >
-                    <div className="inline-flex flex-col items-center gap-3 p-6 gradient-border card-gradient rounded-2xl glow-purple-sm max-w-md w-full">
+                    <div className="inline-flex flex-col items-center gap-3 p-6 gradient-border card-gradient rounded-2xl glow-purple-sm text-center max-w-sm w-full">
                         <p className="text-white font-semibold">Not quite right?</p>
                         <p className="text-sm text-muted-foreground">
-                            Tell the AI what to change — it&apos;ll regenerate all paths based on your feedback instantly.
+                            Give the AI feedback and regenerate all paths instantly.
                         </p>
                         <button
                             onClick={() => setRefineOpen(true)}
@@ -154,13 +268,11 @@ export default function DashboardPage() {
                     </div>
                 </motion.div>
 
-                {/* Generated at */}
                 <p className="text-center text-xs text-muted-foreground mt-8">
-                    Generated {new Date(result.generatedAt).toLocaleString()} · Powered by OpenRouter · Campus-2-Cash
+                    Generated {new Date(result.generatedAt).toLocaleString()} · Powered by Gemini 2.0 Flash · Campus-2-Cash
                 </p>
             </div>
 
-            {/* Refine Modal */}
             <RefineModal
                 isOpen={refineOpen}
                 onClose={() => setRefineOpen(false)}
