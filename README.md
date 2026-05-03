@@ -1,17 +1,27 @@
 Campus 2 Cash
-    A web app that helps students turn their projects into something that can actually earn money.
+   
+A web app that helps students turn their projects into something that can actually earn money.
 
 What it does
+
 You enter your project details, and the app gives:
+
 -A score showing how useful your project is in the real world
+
 -Possible ways to make money from it
+
 -Basic pricing ideas
+
 -Target users
 
 Built with
+
 -Next.js
+
 -React
+
 -Tailwind CSS
+
 -OpenRouter API
 
 How to run
